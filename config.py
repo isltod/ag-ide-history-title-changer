@@ -16,6 +16,9 @@ ANNOTATIONS_DIR = os.path.join(GEMINI_IDE_DIR, "annotations")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_BACKUP_ROOT = os.path.join(BASE_DIR, "backups")
 
+# 기본 언어 설정: 'auto' (시스템 감지), 'ko', 'en'
+DEFAULT_LANG = "auto"
+
 
 def get_active_language_server_port() -> int:
     """

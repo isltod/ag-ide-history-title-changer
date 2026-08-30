@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from typing import List, Dict
 from config import BRAIN_DIR, CONVERSATIONS_DIR, ANNOTATIONS_DIR
+from i18n import t
 
 def encode_varint(v: int) -> bytes:
     res = []
@@ -114,7 +115,7 @@ def get_conversation_list() -> List[Dict]:
                 except Exception:
                     pass
         if not title:
-            title = "새 대화 (제목 없음)"
+            title = t("untitled_conv")
         results.append({
             "id": conv_id,
             "mtime": mtime,
@@ -155,7 +156,7 @@ def update_local_title(conv_id: str, new_title: str) -> bool:
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f"[경고] SQLite DB 갱신 오류: {e}")
+            print(t("warn_db_update_error", err=e))
     logs_dir = os.path.join(BRAIN_DIR, conv_id, ".system_generated", "logs")
     for log_name in ["transcript.jsonl", "transcript_full.jsonl"]:
         log_file = os.path.join(logs_dir, log_name)
@@ -168,5 +169,5 @@ def update_local_title(conv_id: str, new_title: str) -> bool:
                 with open(log_file, "w", encoding="utf-8") as lf:
                     lf.write(l_content)
             except Exception as e:
-                print(f"[경고] 로그 갱신 오류: {e}")
+                print(t("warn_log_update_error", err=e))
     return True
