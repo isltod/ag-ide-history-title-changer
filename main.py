@@ -1,15 +1,17 @@
 """
 안티그래비티 IDE 대화 히스토리 제목 변경기 - 메인 실행 CLI
+다국어(i18n) 지원 및 실시간 동기화 지원
 """
 import sys
 import os
 import shutil
 import unicodedata
 import argparse
-from config import DEFAULT_BACKUP_ROOT
+from config import DEFAULT_BACKUP_ROOT, DEFAULT_LANG
 from backup_manager import create_backup
 from local_storage import get_conversation_list, update_local_title
 from ls_client import notify_language_server_rename
+from i18n import t, set_lang
 
 # 콘솔 UTF-8 출력 보장
 if sys.platform == "win32":
@@ -56,7 +58,7 @@ def get_term_width() -> int:
 
 def print_banner(width: int):
     print("\n" + "=" * width)
-    print("  Antigravity IDE - 대화 히스토리 목록")
+    print(f"  {t('banner_title')}")
     print("=" * width)
 
 
@@ -78,7 +80,7 @@ def display_list(convs, limit=15):
         
     print("=" * term_width)
     if len(convs) > limit:
-        print(f"  ... 외 {len(convs) - limit}개 이전 대화가 더 있습니다.")
+        print(t("more_convs", count=len(convs) - limit))
     print()
 
 
@@ -86,60 +88,60 @@ def interactive_mode():
     convs = get_conversation_list()
     
     if not convs:
-        print("\n❌ 저장된 Antigravity IDE 대화 기록을 찾을 수 없습니다.\n")
+        print(t("no_convs_found"))
         return
 
     while True:
         display_list(convs)
-        choice = input("👉 제목을 수정할 대화 번호를 입력하세요 (종료: 'q'): ").strip()
+        choice = input(t("prompt_select_index")).strip()
         
         if choice.lower() in ('q', 'quit', 'exit'):
-            print("\n프로그램을 종료합니다.")
+            print(t("exit_program"))
             break
             
         if not choice.isdigit() or int(choice) < 1 or int(choice) > len(convs):
-            print(f"❌ 1부터 {len(convs)} 사이의 번호를 입력해주세요.\n")
+            print(t("err_invalid_index", max_num=len(convs)))
             continue
             
         selected_conv = convs[int(choice) - 1]
         conv_id = selected_conv["id"]
         
-        print(f"\n선택된 대화: {selected_conv['title']}")
-        new_title = input("👉 변경할 새 제목을 입력하세요: ").strip()
+        print(t("selected_conv", title=selected_conv['title']))
+        new_title = input(t("prompt_new_title")).strip()
         if not new_title:
-            print("❌ 제목이 비어 있습니다. 작업을 취소합니다.\n")
+            print(t("err_empty_title"))
             continue
             
         # 백업 경로 입력 받기
-        print(f"\n백업 저장 경로 (기본값: {DEFAULT_BACKUP_ROOT})")
-        custom_backup = input("👉 백업 경로 입력 (기본값 사용 시 엔터): ").strip()
+        print(t("backup_path_info", default_path=DEFAULT_BACKUP_ROOT))
+        custom_backup = input(t("prompt_backup_path")).strip()
         backup_path = custom_backup if custom_backup else DEFAULT_BACKUP_ROOT
         
         # 1. 백업 실행
-        print(f"\n[1/3] 백업 진행 중... -> {backup_path}")
+        print(t("step_backup", path=backup_path))
         try:
             saved_dir = create_backup(conv_id, backup_path)
-            print(f"  ✅ 백업 완료: {saved_dir}")
+            print(t("backup_success", path=saved_dir))
         except Exception as e:
-            print(f"  ❌ 백업 실패: {e}")
-            confirm = input("  ⚠️ 백업 없이 계속 진행하시겠습니까? (y/N): ").strip().lower()
+            print(t("backup_failed", err=e))
+            confirm = input(t("confirm_continue_without_backup")).strip().lower()
             if confirm != 'y':
                 continue
                 
         # 2. 로컬 스토리지 갱신
-        print("[2/3] 로컬 데이터 갱신 중 (DB, 로그, 어노테이션)...")
+        print(t("step_local_update"))
         update_local_title(conv_id, new_title)
-        print("  ✅ 로컬 데이터 갱신 완료")
+        print(t("local_update_success"))
         
         # 3. Language Server 실시간 동기화
-        print("[3/3] Language Server 실시간 동기화 시도 중...")
+        print(t("step_ls_sync"))
         synced = notify_language_server_rename(conv_id, new_title)
         if synced:
-            print("  ✅ Language Server 실시간 동기화 완료! (IDE에 즉시 반영됨)")
+            print(t("ls_sync_success"))
         else:
-            print("  ℹ️ 로컬 데이터 갱신 완료 (IDE 재시작 또는 창 다시 로드 시 반영)")
+            print(t("ls_sync_offline"))
             
-        print(f"\n🎉 '{selected_conv['title']}' -> '{new_title}' 변경 완료!\n")
+        print(t("rename_success", old_title=selected_conv['title'], new_title=new_title))
         
         # 목록 갱신
         convs = get_conversation_list()
@@ -147,19 +149,25 @@ def interactive_mode():
 
 def main():
     parser = argparse.ArgumentParser(description="Antigravity IDE Conversation Title Changer")
-    parser.add_argument("action", nargs="?", default="interactive", choices=["list", "rename", "interactive"])
-    parser.add_argument("--id", help="대상 대화 ID 또는 목록 번호")
-    parser.add_argument("--title", help="새로 설정할 제목")
-    parser.add_argument("--backup-dir", default=DEFAULT_BACKUP_ROOT, help="백업 저장 루트 경로")
+    parser.add_argument("action", nargs="?", default="interactive", choices=["list", "rename", "interactive"],
+                        help="Action to perform")
+    parser.add_argument("--id", help="Target conversation ID or list index")
+    parser.add_argument("--title", help="New title to set")
+    parser.add_argument("--backup-dir", default=DEFAULT_BACKUP_ROOT, help="Backup root path")
+    parser.add_argument("--lang", default=DEFAULT_LANG, choices=["auto", "ko", "en"],
+                        help="Interface language: 'auto' (system detect), 'ko', or 'en'")
     
     args = parser.parse_args()
+    
+    # 언어 설정 적용
+    set_lang(args.lang)
     
     if args.action == "list":
         convs = get_conversation_list()
         display_list(convs, limit=len(convs))
     elif args.action == "rename":
         if not args.id or not args.title:
-            print("❌ --id 와 --title 옵션이 필요합니다.")
+            print(t("cli_err_missing_args"))
             sys.exit(1)
         convs = get_conversation_list()
         target_id = args.id
@@ -168,15 +176,15 @@ def main():
             if 1 <= idx <= len(convs):
                 target_id = convs[idx - 1]["id"]
             else:
-                print(f"❌ 유효하지 않은 번호입니다: {target_id}")
+                print(t("cli_err_invalid_index", target_id=target_id))
                 sys.exit(1)
                 
         backup_dir = create_backup(target_id, args.backup_dir)
-        print(f"✅ 백업 완료: {backup_dir}")
+        print(t("backup_success", path=backup_dir))
         update_local_title(target_id, args.title)
-        print("✅ 로컬 데이터 갱신 완료")
+        print(t("local_update_success"))
         notify_language_server_rename(target_id, args.title)
-        print(f"🎉 대화 ID {target_id} 의 제목이 '{args.title}'(으)로 변경되었습니다.")
+        print(t("cli_rename_success", conv_id=target_id, title=args.title))
     else:
         interactive_mode()
 
